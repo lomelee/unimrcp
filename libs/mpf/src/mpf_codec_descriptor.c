@@ -16,7 +16,6 @@
 
 #include "mpf_codec_descriptor.h"
 #include "mpf_named_event.h"
-#include "mpf_rtp_pt.h"
 
 /* linear PCM (host horder) */
 #define LPCM_CODEC_NAME        "LPCM"
@@ -55,13 +54,14 @@ static APR_INLINE apt_bool_t mpf_sampling_rate_check(apr_uint16_t sampling_rate,
 	return (mpf_sample_rate_mask_get(sampling_rate) & mask) ? TRUE : FALSE;
 }
 
-MPF_DECLARE(mpf_codec_descriptor_t*) mpf_codec_lpcm_descriptor_create(apr_uint16_t sampling_rate, apr_byte_t channel_count, apr_pool_t *pool)
+MPF_DECLARE(mpf_codec_descriptor_t*) mpf_codec_lpcm_descriptor_create(apr_uint16_t sampling_rate, apr_byte_t channel_count, apr_uint16_t frame_duration, apr_pool_t *pool)
 {
 	mpf_codec_descriptor_t *descriptor = mpf_codec_descriptor_create(pool);
 	descriptor->payload_type = RTP_PT_UNKNOWN;
 	descriptor->name = lpcm_attribs.name;
-	descriptor->sampling_rate = sampling_rate;
+	mpf_codec_sampling_rate_set(descriptor, sampling_rate);
 	descriptor->channel_count = channel_count;
+	descriptor->frame_duration = frame_duration;
 	return descriptor;
 }
 
@@ -75,7 +75,7 @@ MPF_DECLARE(mpf_codec_descriptor_t*) mpf_codec_descriptor_create_by_capabilities
 	}
 	
 	if(!attribs) {
-		return mpf_codec_lpcm_descriptor_create(8000,1,pool);
+		return mpf_codec_lpcm_descriptor_create(8000,1,CODEC_FRAME_TIME_BASE,pool);
 	}
 
 	descriptor = mpf_codec_descriptor_create(pool);
@@ -104,6 +104,15 @@ MPF_DECLARE(apt_bool_t) mpf_codec_descriptors_match(const mpf_codec_descriptor_t
 			}
 		}
 	}
+
+	if (match == TRUE) {
+		if (descriptor1->match_formats) {
+			match = descriptor1->match_formats(descriptor1->format_params,descriptor2->format_params);
+		}
+		else if (descriptor2->match_formats) {
+			match = descriptor2->match_formats(descriptor2->format_params,descriptor1->format_params);
+		}
+	}
 	return match;
 }
 
@@ -127,6 +136,7 @@ MPF_DECLARE(apt_bool_t) mpf_codec_descriptor_match_by_attribs(mpf_codec_descript
 		if(static_descriptor && static_descriptor->payload_type == descriptor->payload_type) {
 			descriptor->name = static_descriptor->name;
 			descriptor->sampling_rate = static_descriptor->sampling_rate;
+			descriptor->rtp_sampling_rate = static_descriptor->rtp_sampling_rate;
 			descriptor->channel_count = static_descriptor->channel_count;
 			match = TRUE;
 		}
@@ -229,6 +239,10 @@ MPF_DECLARE(apt_bool_t) mpf_codec_lists_intersect(mpf_codec_list_t *codec_list1,
 					descriptor1->enabled = TRUE;
 					codec_list1->event_descriptor = descriptor1;
 					codec_list2->event_descriptor = descriptor2;
+
+					if(descriptor2->payload_type != descriptor1->payload_type) {
+						descriptor2->payload_type = descriptor1->payload_type;
+					}
 				}
 				else {
 					/* no match found, disable this descriptor */
@@ -249,6 +263,10 @@ MPF_DECLARE(apt_bool_t) mpf_codec_lists_intersect(mpf_codec_list_t *codec_list1,
 					descriptor1->enabled = TRUE;
 					codec_list1->primary_descriptor = descriptor1;
 					codec_list2->primary_descriptor = descriptor2;
+
+					if(descriptor2->payload_type >= RTP_PT_DYNAMIC && descriptor2->payload_type != descriptor1->payload_type) {
+						descriptor2->payload_type = descriptor1->payload_type;
+					}
 				}
 				else {
 					/* no match found, disable this descriptor */

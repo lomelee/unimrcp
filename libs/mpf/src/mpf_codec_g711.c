@@ -24,16 +24,6 @@
 #define G711a_CODEC_NAME        "PCMA"
 #define G711a_CODEC_NAME_LENGTH (sizeof(G711a_CODEC_NAME)-1)
 
-static apt_bool_t g711_open(mpf_codec_t *codec)
-{
-	return TRUE;
-}
-
-static apt_bool_t g711_close(mpf_codec_t *codec)
-{
-	return TRUE;
-}
-
 static apt_bool_t g711u_encode(mpf_codec_t *codec, const mpf_codec_frame_t *frame_in, mpf_codec_frame_t *frame_out)
 {
 	const apr_int16_t *decode_buf;
@@ -70,7 +60,7 @@ static apt_bool_t g711u_decode(mpf_codec_t *codec, const mpf_codec_frame_t *fram
 	return TRUE;
 }
 
-static apt_bool_t g711u_init(mpf_codec_t *codec, mpf_codec_frame_t *frame_out)
+static apt_bool_t g711u_fill(mpf_codec_t *codec, mpf_codec_frame_t *frame_out)
 {
 	apr_size_t i;
 	unsigned char *encode_buf = frame_out->buffer;
@@ -117,7 +107,7 @@ static apt_bool_t g711a_decode(mpf_codec_t *codec, const mpf_codec_frame_t *fram
 	return TRUE;
 }
 
-static apt_bool_t g711a_init(mpf_codec_t *codec, mpf_codec_frame_t *frame_out)
+static apt_bool_t g711a_fill(mpf_codec_t *codec, mpf_codec_frame_t *frame_out)
 {
 	apr_size_t i;
 	unsigned char *encode_buf = frame_out->buffer;
@@ -129,29 +119,40 @@ static apt_bool_t g711a_init(mpf_codec_t *codec, mpf_codec_frame_t *frame_out)
 }
 
 static const mpf_codec_vtable_t g711u_vtable = {
-	g711_open,
-	g711_close,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 	g711u_encode,
 	g711u_decode,
 	NULL,
-	g711u_init
+	NULL,
+	g711u_fill,
+	NULL
 };
 
 static const mpf_codec_vtable_t g711a_vtable = {
-	g711_open,
-	g711_close,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 	g711a_encode,
 	g711a_decode,
 	NULL,
-	g711a_init
+	NULL,
+	g711a_fill,
+	NULL
 };
 
 static const mpf_codec_descriptor_t g711u_descriptor = {
 	RTP_PT_PCMU,
 	{G711u_CODEC_NAME, G711u_CODEC_NAME_LENGTH},
 	8000,
+	8000,
 	1,
-	{NULL, 0},
+	0,
+	NULL,
+	NULL,
 	TRUE
 };
 
@@ -159,23 +160,28 @@ static const mpf_codec_descriptor_t g711a_descriptor = {
 	RTP_PT_PCMA,
 	{G711a_CODEC_NAME, G711a_CODEC_NAME_LENGTH},
 	8000,
+	8000,
 	1,
-	{NULL,0},
+	0,
+	NULL,
+	NULL,
 	TRUE
 };
 
 static const mpf_codec_attribs_t g711u_attribs = {
-	{G711u_CODEC_NAME, G711u_CODEC_NAME_LENGTH},  /* codec name */
-	8,                                            /* bits per sample */
+	{G711u_CODEC_NAME, G711u_CODEC_NAME_LENGTH},   /* codec name */
+	8,                                             /* bits per sample */
 	MPF_SAMPLE_RATE_8000 | MPF_SAMPLE_RATE_16000 |
-	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000 /* supported sampling rates */
+	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000, /* supported sampling rates */
+	10                                             /* base frame duration */
 };
 
 static const mpf_codec_attribs_t g711a_attribs = {
-	{G711a_CODEC_NAME, G711a_CODEC_NAME_LENGTH},  /* codec name */
-	8,                                            /* bits per sample */
+	{G711a_CODEC_NAME, G711a_CODEC_NAME_LENGTH},   /* codec name */
+	8,                                             /* bits per sample */
 	MPF_SAMPLE_RATE_8000 | MPF_SAMPLE_RATE_16000 |
-	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000 /* supported sampling rates */
+	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000, /* supported sampling rates */
+	10                                             /* base frame duration */
 };
 
 mpf_codec_t* mpf_codec_g711u_create(apr_pool_t *pool)

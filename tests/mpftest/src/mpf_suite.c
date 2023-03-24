@@ -435,7 +435,7 @@ static mpf_audio_file_descriptor_t* mpf_file_reader_descriptor_create(const mpf_
 	descriptor->mask = FILE_READER;
 	descriptor->read_handle = NULL;
 	descriptor->write_handle = NULL;
-	descriptor->codec_descriptor = mpf_codec_lpcm_descriptor_create(8000,1,session->pool);
+	descriptor->codec_descriptor = mpf_codec_lpcm_descriptor_create(8000,1,CODEC_FRAME_TIME_BASE,session->pool);
 	if(file_path) {
 		apt_log(APT_LOG_MARK,APT_PRIO_INFO,"Open File [%s] for Reading",file_path);
 		descriptor->read_handle = fopen(file_path,"rb");
@@ -455,7 +455,7 @@ static mpf_audio_file_descriptor_t* mpf_file_writer_descriptor_create(const mpf_
 	descriptor->max_write_size = 500000; /* ~500Kb */
 	descriptor->write_handle = NULL;
 	descriptor->read_handle = NULL;
-	descriptor->codec_descriptor = mpf_codec_lpcm_descriptor_create(8000,1,session->pool);
+	descriptor->codec_descriptor = mpf_codec_lpcm_descriptor_create(8000,1,CODEC_FRAME_TIME_BASE,session->pool);
 	if(file_path) {
 		apt_log(APT_LOG_MARK,APT_PRIO_INFO,"Open File [%s] for Writing",file_path);
 		descriptor->write_handle = fopen(file_path,"wb");
@@ -504,7 +504,7 @@ static mpf_rtp_stream_descriptor_t* mpf_rtp_rx_remote_descriptor_create(const mp
 	if(codec_descriptor) {
 		codec_descriptor->payload_type = 0;
 		apt_string_set(&codec_descriptor->name,"PCMU");
-		codec_descriptor->sampling_rate = 8000;
+		mpf_codec_sampling_rate_set(codec_descriptor, 8000);
 		codec_descriptor->channel_count = 1;
 	}
 
@@ -553,7 +553,7 @@ static mpf_rtp_stream_descriptor_t* mpf_rtp_tx_remote_descriptor_create(const mp
 	if(codec_descriptor) {
 		codec_descriptor->payload_type = 0;
 		apt_string_set(&codec_descriptor->name,"PCMU");
-		codec_descriptor->sampling_rate = 8000;
+		mpf_codec_sampling_rate_set(codec_descriptor, 8000);
 		codec_descriptor->channel_count = 1;
 	}
 

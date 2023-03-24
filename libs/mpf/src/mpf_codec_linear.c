@@ -23,17 +23,6 @@
 #define L16_CODEC_NAME        "L16"
 #define L16_CODEC_NAME_LENGTH (sizeof(L16_CODEC_NAME)-1)
 
-
-static apt_bool_t l16_open(mpf_codec_t *codec)
-{
-	return TRUE;
-}
-
-static apt_bool_t l16_close(mpf_codec_t *codec)
-{
-	return TRUE;
-}
-
 static apt_bool_t l16_encode(mpf_codec_t *codec, const mpf_codec_frame_t *frame_in, mpf_codec_frame_t *frame_out)
 {
 	apr_uint32_t i;
@@ -67,19 +56,24 @@ static apt_bool_t l16_decode(mpf_codec_t *codec, const mpf_codec_frame_t *frame_
 }
 
 static const mpf_codec_vtable_t l16_vtable = {
-	l16_open,
-	l16_close,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 	l16_encode,
 	l16_decode,
+	NULL,
+	NULL,
 	NULL,
 	NULL
 };
 
 static const mpf_codec_attribs_t l16_attribs = {
-	{L16_CODEC_NAME, L16_CODEC_NAME_LENGTH},      /* codec name */
-	16,                                           /* bits per sample */
+	{L16_CODEC_NAME, L16_CODEC_NAME_LENGTH},       /* codec name */
+	16,                                            /* bits per sample */
 	MPF_SAMPLE_RATE_8000 | MPF_SAMPLE_RATE_16000 |
-	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000 /* supported sampling rates */
+	MPF_SAMPLE_RATE_32000 | MPF_SAMPLE_RATE_48000, /* supported sampling rates */
+	10                                             /* base frame duration */
 };
 
 mpf_codec_t* mpf_codec_l16_create(apr_pool_t *pool)

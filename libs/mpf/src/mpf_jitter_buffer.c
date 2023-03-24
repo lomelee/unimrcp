@@ -17,6 +17,8 @@
 #include "mpf_jitter_buffer.h"
 #include "mpf_trace.h"
 
+#define MAX_FRAMES_PER_PACKET 16
+
 #if ENABLE_JB_TRACE == 1
 #define JB_TRACE printf
 #elif ENABLE_JB_TRACE == 2
@@ -44,6 +46,8 @@ struct mpf_jitter_buffer_t {
 	apr_uint32_t     frame_ts;
 	/* frame size in bytes */
 	apr_size_t       frame_size;
+	/** Frame duration in msec */
+	apr_uint16_t     frame_duration;
 
 	/* playout delay in timetsamp units */
 	apr_uint32_t     playout_delay_ts;
@@ -101,9 +105,10 @@ mpf_jitter_buffer_t* mpf_jitter_buffer_create(mpf_jb_config_t *jb_config, mpf_co
 	jb->codec = codec;
 
 	/* calculate and allocate frame related data */
-	jb->frame_ts = (apr_uint32_t)mpf_codec_frame_samples_calculate(descriptor);
-	jb->frame_size = mpf_codec_frame_size_calculate(descriptor,codec->attribs);
-	jb->frame_count = jb->config->max_playout_delay / CODEC_FRAME_TIME_BASE;
+	jb->frame_duration = descriptor->frame_duration;
+	jb->frame_ts = (apr_uint32_t)mpf_codec_frame_samples_calculate(descriptor->rtp_sampling_rate,descriptor->channel_count,jb->frame_duration);
+	jb->frame_size = mpf_codec_frame_size_calculate(descriptor->sampling_rate,descriptor->channel_count,descriptor->frame_duration,codec->attribs->bits_per_sample);
+	jb->frame_count = jb->config->max_playout_delay / jb->frame_duration;
 	jb->raw_data = apr_palloc(pool,jb->frame_size*jb->frame_count);
 	jb->frames = apr_palloc(pool,sizeof(mpf_frame_t)*jb->frame_count);
 	for(i=0; i<jb->frame_count; i++) {
@@ -113,13 +118,13 @@ mpf_jitter_buffer_t* mpf_jitter_buffer_create(mpf_jb_config_t *jb_config, mpf_co
 		frame->codec_frame.buffer = jb->raw_data + i*jb->frame_size;
 	}
 
-	if(jb->config->initial_playout_delay % CODEC_FRAME_TIME_BASE != 0) {
-		jb->config->initial_playout_delay += CODEC_FRAME_TIME_BASE - jb->config->initial_playout_delay % CODEC_FRAME_TIME_BASE;
+	if(jb->config->initial_playout_delay % jb->frame_duration != 0) {
+		jb->config->initial_playout_delay += jb->frame_duration - jb->config->initial_playout_delay % jb->frame_duration;
 	}
 
 	/* calculate playout delay in timestamp units */
-	jb->playout_delay_ts = jb->frame_ts * jb->config->initial_playout_delay / CODEC_FRAME_TIME_BASE;
-	jb->max_playout_delay_ts = jb->frame_ts * jb->config->max_playout_delay / CODEC_FRAME_TIME_BASE;
+	jb->playout_delay_ts = jb->frame_ts * jb->config->initial_playout_delay / jb->frame_duration;
+	jb->max_playout_delay_ts = jb->frame_ts * jb->config->max_playout_delay / jb->frame_duration;
 
 	jb->write_sync = 1;
 	jb->write_ts_offset = 0;
@@ -150,7 +155,7 @@ apt_bool_t mpf_jitter_buffer_restart(mpf_jitter_buffer_t *jb)
 	jb->event_write_update = NULL;
 
 	if(jb->config->adaptive && jb->playout_delay_ts == jb->max_playout_delay_ts) {
-		jb->playout_delay_ts = jb->frame_ts * jb->config->initial_playout_delay / CODEC_FRAME_TIME_BASE;
+		jb->playout_delay_ts = jb->frame_ts * jb->config->initial_playout_delay / jb->frame_duration;
 	}
 
 	JB_TRACE("JB restart\n");
@@ -226,8 +231,11 @@ jb_result_t mpf_jitter_buffer_write(mpf_jitter_buffer_t *jb, void *buffer, apr_s
 {
 	mpf_frame_t *media_frame;
 	apr_uint32_t write_ts;
-	apr_size_t available_frame_count;
+	apr_uint16_t available_frame_count;
 	jb_result_t result;
+	mpf_codec_frame_t frames[MAX_FRAMES_PER_PACKET];
+	apr_uint16_t frame_count = MAX_FRAMES_PER_PACKET;
+	apr_uint16_t i;
 
 	if(marker) {
 		JB_TRACE("JB marker\n");
@@ -325,7 +333,7 @@ jb_result_t mpf_jitter_buffer_write(mpf_jitter_buffer_t *jb, void *buffer, apr_s
 	}
 
 	/* get number of frames available to write */
-	available_frame_count = jb->frame_count - (write_ts - jb->read_ts)/jb->frame_ts;
+	available_frame_count = (apr_uint16_t) (jb->frame_count - (write_ts - jb->read_ts)/jb->frame_ts);
 	if(available_frame_count <= 0) {
 		/* too early */
 		JB_TRACE("JB write ts=%u too early => discard\n",write_ts);
@@ -333,20 +341,21 @@ jb_result_t mpf_jitter_buffer_write(mpf_jitter_buffer_t *jb, void *buffer, apr_s
 	}
 
 	JB_TRACE("JB write ts=%u size=%"APR_SIZE_T_FMT"\n",write_ts,size);
-	while(available_frame_count && size) {
-		media_frame = mpf_jitter_buffer_frame_get(jb,write_ts);
-		media_frame->codec_frame.size = jb->frame_size;
-		if(mpf_codec_dissect(jb->codec,&buffer,&size,&media_frame->codec_frame) == FALSE) {
-			break;
+	if (mpf_codec_dissect(jb->codec, buffer, size, jb->frame_size, frames, &frame_count) == TRUE) {
+		if (frame_count > available_frame_count) {
+			/* not all frames can be accommodated (partially too early) */
+			JB_TRACE("JB write ts=%u partially too early => discard %d frames\n", write_ts, frame_count - available_frame_count);
+			frame_count = available_frame_count;
 		}
 
-		media_frame->type |= MEDIA_FRAME_TYPE_AUDIO;
-		write_ts += jb->frame_ts;
-		available_frame_count--;
-	}
+		for (i = 0; i < frame_count; i++) {
+			media_frame = mpf_jitter_buffer_frame_get(jb, write_ts);
+			media_frame->codec_frame.size = frames[i].size;
+			memcpy(media_frame->codec_frame.buffer, frames[i].buffer, frames[i].size);
 
-	if(size) {
-		/* no frame available to write, but some data remains in buffer (partialy too early) */
+			media_frame->type |= MEDIA_FRAME_TYPE_AUDIO;
+			write_ts += jb->frame_ts;
+		}
 	}
 
 	if(write_ts > jb->write_ts) {
@@ -507,5 +516,5 @@ apr_uint32_t mpf_jitter_buffer_playout_delay_get(const mpf_jitter_buffer_t *jb)
 		return jb->config->initial_playout_delay;
 	}
 
-	return jb->playout_delay_ts * CODEC_FRAME_TIME_BASE / jb->frame_ts;
+	return jb->playout_delay_ts * jb->frame_duration / jb->frame_ts;
 }
