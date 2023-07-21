@@ -337,10 +337,6 @@ APT_DECLARE(apt_message_status_e) apt_message_parser_run(apt_message_parser_t *p
 	}
 	while(apt_text_is_eos(stream) == FALSE);
 
-	// modify by allen @2023-03-23
-	if (status == APT_MESSAGE_STATUS_INCOMPLETE) {
-		*message = parser->context.message;
-	}
 	return status;
 }
 

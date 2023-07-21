@@ -494,10 +494,6 @@ static apt_bool_t mrcp_client_agent_channel_remove(mrcp_connection_agent_t *agen
 
 static apt_bool_t mrcp_client_agent_request_cancel(mrcp_connection_agent_t *agent, mrcp_control_channel_t *channel, mrcp_message_t *message)
 {
-	// 已经取消了，不在发送消息
-	if(!message->pool){
-		return FALSE;
-	}
 	mrcp_message_t *response;
 	apt_obj_log(APT_LOG_MARK,APT_PRIO_WARNING,channel->log_obj,"Cancel MRCP Request <%s@%s> [%d]",
 		MRCP_MESSAGE_SIDRES(message),
@@ -585,7 +581,7 @@ static apt_bool_t mrcp_client_agent_messsage_send(mrcp_connection_agent_t *agent
 	return status;
 }
 
-static apt_bool_t mrcp_client_message_handler(mrcp_connection_t *connection, mrcp_message_t *message, apt_message_status_e status, const char *pszInPartMsg)
+static apt_bool_t mrcp_client_message_handler(mrcp_connection_t *connection, mrcp_message_t *message, apt_message_status_e status)
 {
 	if(status == APT_MESSAGE_STATUS_COMPLETE) {
 		/* message is completely parsed */
@@ -617,33 +613,6 @@ static apt_bool_t mrcp_client_message_handler(mrcp_connection_t *connection, mrc
 				connection->id,
 				apr_hash_count(connection->channel_table));
 		}
-	}
-	else if (status == APT_MESSAGE_STATUS_INCOMPLETE) {
-		if (NULL == message || NULL == pszInPartMsg) {
-			return TRUE;
-		}
-		/* message is inCompletely parsed */
-		mrcp_control_channel_t *channel;
-		apt_str_t identifier;		
-		apt_str_t sid = message->channel_id.session_id;
-		apt_str_t rName = message->channel_id.resource_name;
-		apt_id_resource_generate(&message->channel_id.session_id, &message->channel_id.resource_name, '@', &identifier, message->pool);
-		channel = mrcp_connection_channel_find(connection,&identifier);
-		if(channel) {
-			mrcp_connection_agent_t *agent = connection->agent;
-			int msgLen = strlen(pszInPartMsg);
-			char *buf = apr_palloc(message->pool, msgLen + 1);
-			memcpy(buf, pszInPartMsg, msgLen);
-			buf[msgLen] = '\0';
-			message->body.buf = buf;
-			message->body.length = msgLen;
-			apt_obj_log(APT_LOG_MARK, APT_PRIO_WARNING, channel->log_obj, "APT_MESSAGE_STATUS_INCOMPLETE MRCP  MSGLen = [%d], MSG = [%s]",
-						msgLen,
-						message->body.buf);
-			// 赋值特殊的类型
-			message->start_line.method_id = 2;
-			mrcp_connection_message_receive(agent->vtable, channel, message);
-		}		
 	}
 	return TRUE;
 }
@@ -694,8 +663,8 @@ static apt_bool_t mrcp_client_poller_signal_process(void *obj, const apr_pollfd_
 	apt_text_stream_reset(stream);
 
 	do {
-		msg_status = mrcp_parser_run(connection->parser, stream, &message);
-		if(mrcp_client_message_handler(connection, message, msg_status, stream->text.buf) == FALSE) {
+		msg_status = mrcp_parser_run(connection->parser,stream,&message);
+		if(mrcp_client_message_handler(connection,message,msg_status) == FALSE) {
 			return FALSE;
 		}
 	}
