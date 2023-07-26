@@ -637,13 +637,11 @@ static apt_bool_t mrcp_client_message_handler(mrcp_connection_t *connection, mrc
 			buf[msgLen] = '\0';
 			message->body.buf = buf;
 			message->body.length = msgLen;
-			apt_obj_log(APT_LOG_MARK, APT_PRIO_WARNING, channel->log_obj, "APT_MESSAGE_STATUS_INCOMPLETE MRCP  MSGLen = [%d], MSG = [%s]",
-						msgLen,
-						message->body.buf);
+			apt_obj_log(APT_LOG_MARK, APT_PRIO_WARNING, channel->log_obj, "mrcp_client_message_handler APT_MESSAGE_STATUS_INCOMPLETE MRCP  MSGLen = [%d]", msgLen);
 			// 赋值特殊的类型
 			message->start_line.method_id = 2;
 			mrcp_connection_message_receive(agent->vtable, channel, message);
-		}		
+		}
 	}
 	return TRUE;
 }

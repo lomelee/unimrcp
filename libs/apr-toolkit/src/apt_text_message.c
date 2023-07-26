@@ -339,7 +339,10 @@ APT_DECLARE(apt_message_status_e) apt_message_parser_run(apt_message_parser_t *p
 
 	// modify by allen @2023-03-23
 	if (status == APT_MESSAGE_STATUS_INCOMPLETE) {
+		apt_log(APT_LOG_MARK,APT_PRIO_WARNING,"apt_message_parser_run [APT_MESSAGE_STATUS_INCOMPLETE]");
 		*message = parser->context.message;
+		// modify by allen @2023-07-26 重置stage指向，避免下一次消息无法从开始解析
+		parser->stage = APT_MESSAGE_STAGE_START_LINE;
 	}
 	return status;
 }
